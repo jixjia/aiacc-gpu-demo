@@ -204,7 +204,7 @@ history = model.fit(
 			trainGen,
 			steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
 			callbacks = callbacks,
-			validation_data=valGen,
+			validation_data=(valGen),
 			epochs = EPOCHS,
 			verbose = verbose)
 t1 = time.time()
