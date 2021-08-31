@@ -49,13 +49,17 @@ ap = argparse.ArgumentParser()
 ap.add_argument("-d", "--dataset", default="dataset",help="path to input dataset")
 ap.add_argument("-p", "--plot", type=str, default="training_plot.png", help="path to output loss/accuracy plot")
 ap.add_argument("-m", "--model", type=str, default="covid19.model", help="path to output loss/accuracy plot")
+ap.add_argument("-lr", "--initial_lr", type=float, default="0.001", help="initial learning rate (default 1e-3)")
+ap.add_argument("-e", "--epochs", type=int, default=50, help="epoch size")
+ap.add_argument("-bs", "--batch_size", type=int, default=64, help="batch size")
+
 args = vars(ap.parse_args())
 
 # initialize the initial learning rate, number of epochs to train for,
 # and batch size
-INIT_LR = 1e-3
-EPOCHS = 5
-BATCH_SIZE = 16
+INIT_LR = args['initial_lr']
+EPOCHS = args['epochs']
+BATCH_SIZE = args['batch_size']
 
 # Horovod: initialize Horovod.
 hvd.init()
@@ -200,6 +204,7 @@ history = model.fit(
 			trainGen,
 			steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
 			callbacks = callbacks,
+			validation_data=valGen,
 			epochs = EPOCHS,
 			verbose = verbose)
 t1 = time.time()
