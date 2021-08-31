@@ -197,10 +197,8 @@ verbose = 1 if hvd.rank() == 0 else 0
 
 t0 = time.time()
 history = model.fit(
-			x=trainGen,
+			trainGen,
 			steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
-			validation_data = valGen,
-			validation_steps = len(testX) // BATCH_SIZE // hvd.size(),
 			callbacks = callbacks,
 			epochs = EPOCHS,
 			verbose = verbose)
