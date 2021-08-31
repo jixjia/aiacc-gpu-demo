@@ -51,7 +51,7 @@ ap.add_argument("-p", "--plot", type=str, default="training_plot.png", help="pat
 ap.add_argument("-m", "--model", type=str, default="covid19.model", help="path to output loss/accuracy plot")
 ap.add_argument("-lr", "--initial_lr", type=float, default="0.001", help="initial learning rate (default 1e-3)")
 ap.add_argument("-e", "--epochs", type=int, default=50, help="epoch size")
-ap.add_argument("-bs", "--batch_size", type=int, default=64, help="batch size")
+ap.add_argument("-bs", "--batch_size", type=int, default=8, help="batch size")
 
 args = vars(ap.parse_args())
 
@@ -110,7 +110,7 @@ labels = to_categorical(labels)
 (trainX, testX, trainY, testY) = train_test_split(data, labels,
 	test_size=0.20, stratify=labels, random_state=123)
 
-print('Loaded ', len(trainX), 'training images and ', len(testX), ' test images')
+print('[INFO] Loaded', len(trainX), 'training images and', len(testX), 'test images')
 
 # initialize the training data augmentation object
 trainAug = ImageDataGenerator(
@@ -199,47 +199,49 @@ print('Done')
 print('[INFO] transfer learning by fine tuning the head...')
 
 # Horovod: write logs on worker 0.
+t0 = time.time()
 verbose = 1 if hvd.rank() == 0 else 0
 
-t0 = time.time()
 history = model.fit(
-			trainGen,
+			x=trainGen,
 			steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
 			callbacks = callbacks,
 			validation_data=(valGen),
+			validation_steps=len(testX) // BATCH_SIZE // hvd.size(),
 			epochs = EPOCHS,
 			verbose = verbose)
 t1 = time.time()
 
-# make predictions on the testing set
-print('[INFO] evaluating fine tuned network...')
-predIdxs = model.predict(testX, batch_size=BATCH_SIZE)
+# execute network evaluation on head node
+if hvd.rank() == 0:
+	print('[INFO] evaluating fine tuned network...')
+	predIdxs = model.predict(testX, batch_size=BATCH_SIZE)
 
-# for each image in the testing set we need to find the index of the
-# label with corresponding largest predicted probability
-predIdxs = np.argmax(predIdxs, axis=1)
+	# for each image in the testing set we need to find the index of the
+	# label with corresponding largest predicted probability
+	predIdxs = np.argmax(predIdxs, axis=1)
 
-# show a nicely formatted classification report
-print(classification_report(testY.argmax(axis=1), predIdxs, target_names=lb.classes_))
+	# show a nicely formatted classification report
+	print(classification_report(testY.argmax(axis=1), predIdxs, target_names=lb.classes_))
 
-# compute the confusion matrix and and use it to derive the raw
-# accuracy, sensitivity, and specificity
-cm = confusion_matrix(testY.argmax(axis=1), predIdxs)
-total = sum(sum(cm))
-acc = (cm[0, 0] + cm[1, 1]) / total
-sensitivity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
-specificity = cm[1, 1] / (cm[1, 0] + cm[1, 1])
+	# compute the confusion matrix and and use it to derive the raw
+	# accuracy, sensitivity, and specificity
+	cm = confusion_matrix(testY.argmax(axis=1), predIdxs)
+	total = sum(sum(cm))
+	acc = (cm[0, 0] + cm[1, 1]) / total
+	sensitivity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
+	specificity = cm[1, 1] / (cm[1, 0] + cm[1, 1])
 
-# show the confusion matrix, accuracy, sensitivity, and specificity
-print("acc: {:.4f}".format(acc))
-print("sensitivity: {:.4f}".format(sensitivity))
-print("specificity: {:.4f}".format(specificity))
+	# show the confusion matrix, accuracy, sensitivity, and specificity
+	print("acc: {:.4f}".format(acc))
+	print("sensitivity: {:.4f}".format(sensitivity))
+	print("specificity: {:.4f}".format(specificity))
 
-# plot the training loss and accuracy
-plot_training(history, EPOCHS, args['plot'])
+	# plot the training loss and accuracy
+	plot_training(history, EPOCHS, args['plot'])
 
-# serialize the model to disk
-print("[INFO] saving COVID-19 detector model...")
-model.save(args["model"], save_format="h5")
+	# serialize the model to disk
+	print("[INFO] saving COVID-19 detector model...")
+	model.save(args["model"], save_format="h5")
 
-print(f"[INFO] total time elapsed {(t1-t0)/60:.1f} min")
+	print(f"[INFO] total time elapsed {(t1-t0)/60:.1f} min")
