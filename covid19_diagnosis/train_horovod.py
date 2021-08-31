@@ -34,6 +34,7 @@ ap.add_argument("-m", "--model", type=str, default="covid19.model", help="path t
 ap.add_argument("-lr", "--initial_lr", type=float, default=0.001, help="initial learning rate (default 1e-3)")
 ap.add_argument("-e", "--epochs", type=int, default=50, help="epoch size")
 ap.add_argument("-bs", "--batch_size", type=int, default=8, help="batch size")
+ap.add_argument("-s", "--step_size", type=int, default=50, help="step size")
 args = vars(ap.parse_args())
 
 
@@ -150,7 +151,7 @@ if gpus:
 
 
 # initialize the initial LR, number of epochs and pool batch size
-STEP_SIZE = 50
+STEP_SIZE = args['step_size']
 INIT_LR = args['initial_lr']
 EPOCHS = args['epochs']
 BATCH_SIZE = args['batch_size']
