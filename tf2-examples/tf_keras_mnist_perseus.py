@@ -15,6 +15,7 @@
 
 import os
 import time
+import sys
 import tensorflow as tf
 import perseus.tensorflow.horovod.keras as hvd
 
@@ -88,7 +89,11 @@ callbacks = [
 class GetAccuracy(tf.keras.callbacks.Callback):
     # get accuracy at end of each epoch
     def on_epoch_end(self, epoch, logs=None):
-        print(f"avg. accuracy: {logs['accuracy']}")
+        print(f"xxx: {logs['accuracy']}")
+
+        if  logs['accuracy'] > 0.99:
+            sys.exit(1)
+
 
 # Horovod: save checkpoints only on worker 0 to prevent other workers from corrupting them.
 if not os.path.exists('checkpoints'):
