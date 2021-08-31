@@ -23,6 +23,7 @@ import perseus.tensorflow.horovod.keras as hvd
 steps_per_epoch = 1000
 epochs = 50
 batch_size = 256
+stop_accuracy = 0.995
 
 # Horovod: initialize Horovod.
 hvd.init()
@@ -64,7 +65,7 @@ opt = hvd.DistributedOptimizer(opt)
 # uses hvd.DistributedOptimizer() to compute gradients.
 mnist_model.compile(loss=tf.losses.SparseCategoricalCrossentropy(),
                     optimizer=opt,
-                    metrics=['accuracy', 'mse'],
+                    metrics=['accuracy'],
                     experimental_run_tf_function=False)
 
 callbacks = [
@@ -89,10 +90,10 @@ callbacks = [
 class GetAccuracy(tf.keras.callbacks.Callback):
     # get accuracy at end of each epoch
     def on_epoch_end(self, epoch, logs=None):
-        print(f"xxx: {logs['accuracy']}")
-
-        if  logs['accuracy'] > 0.99:
-            sys.exit(1)
+        
+        if logs['accuracy'] > stop_accuracy:
+            print('Training has stopped because it reached desired Accuracy')
+            self.model.stop_training = True
 
 
 # Horovod: save checkpoints only on worker 0 to prevent other workers from corrupting them.
@@ -108,4 +109,8 @@ verbose = 1 if hvd.rank() == 0 else 0
 
 # Train the model.
 # Horovod: adjust number of steps based on number of GPUs.
+t0 = time.time()
 mnist_model.fit(dataset, steps_per_epoch=steps_per_epoch // hvd.size(), callbacks=callbacks, epochs=epochs, verbose=verbose)
+t1 = time.time()
+
+print(f'Took: {t1-t0:.2f} sec to reach {str(stop_accuracy*100)}% accuracy')
