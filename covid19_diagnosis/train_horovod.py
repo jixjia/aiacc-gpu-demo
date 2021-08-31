@@ -110,6 +110,8 @@ labels = to_categorical(labels)
 (trainX, testX, trainY, testY) = train_test_split(data, labels,
 	test_size=0.20, stratify=labels, random_state=123)
 
+print('Loaded ', len(trainX), 'training images and ', len(testX), ' test images')
+
 # initialize the training data augmentation object
 trainAug = ImageDataGenerator(
 	rotation_range=30,
