@@ -150,7 +150,7 @@ if gpus:
 
 
 # initialize the initial LR, number of epochs and pool batch size
-STEP_SIZE = 120
+STEP_SIZE = 50
 INIT_LR = args['initial_lr']
 EPOCHS = args['epochs']
 BATCH_SIZE = args['batch_size']
@@ -209,10 +209,11 @@ verbose = 1 if hvd.rank() == 0 else 0
 t0 = time.time()
 history = model.fit(
 			x=trainAug,
-			steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
-			# steps_per_epoch = STEP_SIZE,
+			# steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
+			steps_per_epoch = STEP_SIZE,
 			validation_data=(valAug),
-			validation_steps=len(testX) // BATCH_SIZE // hvd.size(),
+			# validation_steps=len(testX) // BATCH_SIZE // hvd.size(),
+			validation_steps=STEP_SIZE // hvd.size(),
 			epochs = EPOCHS,
 			verbose = verbose,
 			callbacks = callbacks)
