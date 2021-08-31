@@ -168,7 +168,8 @@ opt = hvd.DistributedOptimizer(opt)
 
 model.compile(loss="binary_crossentropy",
                     optimizer=opt,
-                    metrics=['accuracy'])
+                    metrics=['accuracy'],
+					experimental_run_tf_function=False)
 
 callbacks = [
     # Horovod: broadcast initial variable states from rank 0 to all other processes.
