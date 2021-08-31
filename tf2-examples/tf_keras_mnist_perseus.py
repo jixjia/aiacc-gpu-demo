@@ -88,7 +88,7 @@ callbacks = [
 class GetAccuracy(tf.keras.callbacks.Callback):
     # get accuracy at end of each epoch
     def on_epoch_end(self, epoch, logs=None):
-        print(f"Epoch {epoch} Accuracy: {logs['accuracy']}")
+        print(f"avg. accuracy: {logs['accuracy']}")
 
 # Horovod: save checkpoints only on worker 0 to prevent other workers from corrupting them.
 if not os.path.exists('checkpoints'):
