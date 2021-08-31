@@ -54,10 +54,10 @@ def plot_training(history, N, plotPath):
 def data_augmentation(trainX,testX,trainY,testY,batch_size):
 	# initialize the training data augmentation
 	trainGen = ImageDataGenerator(
-		rotation_range=30,
-		zoom_range=0.15,
-		width_shift_range=0.2,
-		height_shift_range=0.2,
+		rotation_range=15,
+		zoom_range=0.2,
+		width_shift_range=0.1,
+		height_shift_range=0.1,
 		shear_range=0.15,
 		horizontal_flip=True,
 		fill_mode="nearest"

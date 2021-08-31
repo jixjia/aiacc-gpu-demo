@@ -37,6 +37,8 @@ preds = model.predict(np.expand_dims(image, axis=0))[0]
 i = np.argmax(preds)
 label = CLASSES[i]
 
+print('raw preds', preds)
+
 # draw the prediction on the output image
 text = "{}: {:.2f}%".format(label, preds[i] * 100)
 cv2.putText(output, text, (3, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)

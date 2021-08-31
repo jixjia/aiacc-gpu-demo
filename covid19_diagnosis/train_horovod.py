@@ -55,10 +55,10 @@ def plot_training(history, N, plotPath):
 def data_augmentation(trainX,testX,trainY,testY,batch_size):
 	# initialize the training data augmentation
 	trainGen = ImageDataGenerator(
-		rotation_range=30,
-		zoom_range=0.15,
-		width_shift_range=0.2,
-		height_shift_range=0.2,
+		rotation_range=15,
+		zoom_range=0.2,
+		width_shift_range=0.1,
+		height_shift_range=0.1,
 		shear_range=0.15,
 		horizontal_flip=True,
 		fill_mode="nearest"
@@ -150,6 +150,7 @@ if gpus:
 
 
 # initialize the initial LR, number of epochs and pool batch size
+STEP_SIZE = 120
 INIT_LR = args['initial_lr']
 EPOCHS = args['epochs']
 BATCH_SIZE = args['batch_size']
@@ -186,12 +187,12 @@ lb = LabelBinarizer()
 labels = lb.fit_transform(labels)
 labels = to_categorical(labels)
 
-# train/test split (80:20)
+# train/test split (90:10)
 (trainX, testX, trainY, testY) = train_test_split(data, 
 												  labels,
-												  test_size=0.20, 
+												  test_size=0.10, 
 												  stratify=labels, 
-												  random_state=123)
+												  random_state=42)
 
 # data augmentation
 trainAug, valAug = data_augmentation(trainX,testX,trainY,testY,BATCH_SIZE)
@@ -208,9 +209,10 @@ verbose = 1 if hvd.rank() == 0 else 0
 t0 = time.time()
 history = model.fit(
 			x=trainAug,
-			steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
+			# steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
+			steps_per_epoch = STEP_SIZE,
 			validation_data=(valAug),
-			validation_steps=len(testX) // BATCH_SIZE // hvd.size(),
+			# validation_steps=len(testX) // BATCH_SIZE // hvd.size(),
 			epochs = EPOCHS,
 			verbose = verbose,
 			callbacks = callbacks)
