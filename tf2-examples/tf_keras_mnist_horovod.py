@@ -21,8 +21,8 @@ import horovod.tensorflow.keras as hvd
 
 # runtime params
 steps_per_epoch = 500
-epochs = 50
-batch_size = 2048
+epochs = 10
+batch_size = 128
 stop_accuracy = 0.995
 
 # Horovod: initialize Horovod.

@@ -22,7 +22,7 @@ import perseus.tensorflow.horovod.keras as hvd
 # runtime params
 steps_per_epoch = 500
 epochs = 10
-batch_size = 2048
+batch_size = 128
 
 # Horovod: initialize Horovod.
 hvd.init()
@@ -101,5 +101,6 @@ t0 = time.time()
 history = mnist_model.fit(dataset, steps_per_epoch=steps_per_epoch // hvd.size(), callbacks=callbacks, epochs=epochs, verbose=verbose)
 t1 = time.time()
 
-acc = history.history['acc']
-print(f"Took: {t1-t0:.2f} sec to reach {acc} accuracy")
+if hvd.rank() == 0:
+    acc = history.history['accuracy']
+    print(f"Took: {t1-t0:.2f} sec to reach {acc} accuracy")
