@@ -22,7 +22,7 @@ import perseus.tensorflow.horovod.keras as hvd
 # runtime params
 steps_per_epoch = 500
 epochs = 50
-batch_size = 512
+batch_size = 2048
 stop_accuracy = 0.995
 
 # Horovod: initialize Horovod.
@@ -91,7 +91,6 @@ class GetAccuracy(tf.keras.callbacks.Callback):
     # get accuracy at end of each epoch
     def on_epoch_end(self, epoch, logs=None):
         if logs['accuracy'] > stop_accuracy:
-            print('\nTraining has stopped because it has reached desired Accuracy')
             self.model.stop_training = True
 
 
@@ -112,4 +111,5 @@ t0 = time.time()
 mnist_model.fit(dataset, steps_per_epoch=steps_per_epoch // hvd.size(), callbacks=callbacks, epochs=epochs, verbose=verbose)
 t1 = time.time()
 
+print('Training stopped because it has reached desired Accuracy')
 print(f'Took: {t1-t0:.2f} sec to reach {str(stop_accuracy*100)}% accuracy')
