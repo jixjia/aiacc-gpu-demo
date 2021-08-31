@@ -91,8 +91,8 @@ def data_augmentation(trainX,testX,trainY,testY,batch_size):
 
 
 def construct_model():
-	# load ResNet50 network with pre-trained ImageNet, lay off head FC layer
-	baseModel = ResNet50(weights="imagenet", 
+	# load MobileNetV2 network with pre-trained ImageNet, lay off head FC layer
+	baseModel = MobileNetV2(weights="imagenet", 
 					  include_top=False, 
 					  input_tensor=Input(shape=(224, 224, 3)))
 
@@ -212,7 +212,7 @@ history = model.fit(
 			x=trainAug,
 			# steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
 			steps_per_epoch = STEP_SIZE,
-			validation_data=(valAug),
+			validation_data=valAug,
 			# validation_steps=len(testX) // BATCH_SIZE // hvd.size(),
 			validation_steps=STEP_SIZE // hvd.size(),
 			epochs = EPOCHS,
