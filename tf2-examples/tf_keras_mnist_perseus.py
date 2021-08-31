@@ -20,9 +20,9 @@ import tensorflow as tf
 import perseus.tensorflow.horovod.keras as hvd
 
 # runtime params
-steps_per_epoch = 1000
+steps_per_epoch = 500
 epochs = 50
-batch_size = 256
+batch_size = 512
 stop_accuracy = 0.995
 
 # Horovod: initialize Horovod.
@@ -90,9 +90,8 @@ callbacks = [
 class GetAccuracy(tf.keras.callbacks.Callback):
     # get accuracy at end of each epoch
     def on_epoch_end(self, epoch, logs=None):
-        
         if logs['accuracy'] > stop_accuracy:
-            print('Training has stopped because it reached desired Accuracy')
+            print('\nTraining has stopped because it has reached desired Accuracy')
             self.model.stop_training = True
 
 
