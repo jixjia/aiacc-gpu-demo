@@ -14,8 +14,16 @@
 # ==============================================================================
 
 import os
+import time
+import sys
 import tensorflow as tf
 import horovod.tensorflow.keras as hvd
+
+# runtime params
+steps_per_epoch = 500
+epochs = 50
+batch_size = 2048
+stop_accuracy = 0.995
 
 # Horovod: initialize Horovod.
 hvd.init()
@@ -34,7 +42,7 @@ dataset = tf.data.Dataset.from_tensor_slices(
     (tf.cast(mnist_images[..., tf.newaxis] / 255.0, tf.float32),
              tf.cast(mnist_labels, tf.int64))
 )
-dataset = dataset.repeat().shuffle(10000).batch(128)
+dataset = dataset.repeat().shuffle(10000).batch(batch_size)
 
 mnist_model = tf.keras.Sequential([
     tf.keras.layers.Conv2D(32, [3, 3], activation='relu'),
@@ -78,16 +86,30 @@ callbacks = [
     # hvd.callbacks.LearningRateWarmupCallback(warmup_epochs=3, verbose=1),
 ]
 
+# custom callbacks (keras)
+class GetAccuracy(tf.keras.callbacks.Callback):
+    # get accuracy at end of each epoch
+    def on_epoch_end(self, epoch, logs=None):
+        if logs['accuracy'] > stop_accuracy:
+            self.model.stop_training = True
+
+
 # Horovod: save checkpoints only on worker 0 to prevent other workers from corrupting them.
 if not os.path.exists('checkpoints'):
     os.makedirs('checkpoints')
 
 if hvd.rank() == 0:
     callbacks.append(tf.keras.callbacks.ModelCheckpoint('checkpoints/checkpoint-{epoch}.h5'))
+    callbacks.append(GetAccuracy())
 
 # Horovod: write logs on worker 0.
 verbose = 1 if hvd.rank() == 0 else 0
 
 # Train the model.
 # Horovod: adjust number of steps based on number of GPUs.
-mnist_model.fit(dataset, steps_per_epoch=500 // hvd.size(), callbacks=callbacks, epochs=24, verbose=verbose)
+t0 = time.time()
+mnist_model.fit(dataset, steps_per_epoch=steps_per_epoch // hvd.size(), callbacks=callbacks, epochs=epochs, verbose=verbose)
+t1 = time.time()
+
+print('Training stopped because it has reached desired Accuracy')
+print(f'Took: {t1-t0:.2f} sec to reach {str(stop_accuracy*100)}% accuracy')
