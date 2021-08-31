@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+import os
 import tensorflow as tf
 import horovod.tensorflow.keras as hvd
 
@@ -78,8 +79,11 @@ callbacks = [
 ]
 
 # Horovod: save checkpoints only on worker 0 to prevent other workers from corrupting them.
+if not os.path.exists('checkpoints'):
+    os.makedirs('checkpoints')
+
 if hvd.rank() == 0:
-    callbacks.append(tf.keras.callbacks.ModelCheckpoint('./checkpoint-{epoch}.h5'))
+    callbacks.append(tf.keras.callbacks.ModelCheckpoint('checkpoints/checkpoint-{epoch}.h5'))
 
 # Horovod: write logs on worker 0.
 verbose = 1 if hvd.rank() == 0 else 0

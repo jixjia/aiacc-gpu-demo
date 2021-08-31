@@ -13,8 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 
+import os
+import time
 import tensorflow as tf
 import perseus.tensorflow.horovod.keras as hvd
+
+# runtime params
+steps_per_epoch = 1000
+epochs = 50
+batch_size = 256
 
 # Horovod: initialize Horovod.
 hvd.init()
@@ -33,7 +40,7 @@ dataset = tf.data.Dataset.from_tensor_slices(
     (tf.cast(mnist_images[..., tf.newaxis] / 255.0, tf.float32),
              tf.cast(mnist_labels, tf.int64))
 )
-dataset = dataset.repeat().shuffle(10000).batch(128)
+dataset = dataset.repeat().shuffle(10000).batch(batch_size)
 
 mnist_model = tf.keras.Sequential([
     tf.keras.layers.Conv2D(32, [3, 3], activation='relu'),
@@ -56,7 +63,7 @@ opt = hvd.DistributedOptimizer(opt)
 # uses hvd.DistributedOptimizer() to compute gradients.
 mnist_model.compile(loss=tf.losses.SparseCategoricalCrossentropy(),
                     optimizer=opt,
-                    metrics=['accuracy'],
+                    metrics=['accuracy', 'mse'],
                     experimental_run_tf_function=False)
 
 callbacks = [
@@ -69,7 +76,7 @@ callbacks = [
     #
     # Note: This callback must be in the list before the ReduceLROnPlateau,
     # TensorBoard or other metrics-based callbacks.
-     hvd.callbacks.MetricAverageCallback(),
+    hvd.callbacks.MetricAverageCallback(),
 
     # Horovod: using `lr = 1.0 * hvd.size()` from the very beginning leads to worse final
     # accuracy. Scale the learning rate `lr = 1.0` ---> `lr = 1.0 * hvd.size()` during
@@ -77,13 +84,23 @@ callbacks = [
     # hvd.callbacks.LearningRateWarmupCallback(warmup_epochs=3, verbose=1),
 ]
 
-# Horovod: save checkpoints only on worker 0 to prevent other workers from corrupting them.
-if hvd.rank() == 0:
-    callbacks.append(tf.keras.callbacks.ModelCheckpoint('./checkpoint-{epoch}.h5'))
+# custom callbacks (keras)
+class GetAccuracy(tf.keras.callbacks.Callback):
+    # get accuracy at end of each epoch
+    def on_epoch_end(self, epoch, logs=None):
+        print(f"Epoch {epoch} Accuracy: {logs['accuracy']}")
 
+# Horovod: save checkpoints only on worker 0 to prevent other workers from corrupting them.
+if not os.path.exists('checkpoints'):
+    os.makedirs('checkpoints')
+
+if hvd.rank() == 0:
+    callbacks.append(tf.keras.callbacks.ModelCheckpoint('checkpoints/checkpoint-{epoch}.h5'))
+    callbacks.append(GetAccuracy())
+    
 # Horovod: write logs on worker 0.
 verbose = 1 if hvd.rank() == 0 else 0
 
 # Train the model.
 # Horovod: adjust number of steps based on number of GPUs.
-mnist_model.fit(dataset, steps_per_epoch=500 // hvd.size(), callbacks=callbacks, epochs=24, verbose=verbose)
+mnist_model.fit(dataset, steps_per_epoch=steps_per_epoch // hvd.size(), callbacks=callbacks, epochs=epochs, verbose=verbose)
