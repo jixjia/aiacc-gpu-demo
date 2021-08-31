@@ -101,4 +101,5 @@ t0 = time.time()
 history = mnist_model.fit(dataset, steps_per_epoch=steps_per_epoch // hvd.size(), callbacks=callbacks, epochs=epochs, verbose=verbose)
 t1 = time.time()
 
-print(f"Took: {t1-t0:.2f} sec to reach {history.history['accuracy'] * 100:.1f}% accuracy")
+acc = history.history['acc']
+print(f"Took: {t1-t0:.2f} sec to reach {acc} accuracy")
