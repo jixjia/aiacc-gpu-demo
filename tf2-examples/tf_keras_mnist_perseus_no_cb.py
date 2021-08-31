@@ -17,12 +17,19 @@ import os
 import time
 import sys
 import tensorflow as tf
+import argparse
 import perseus.tensorflow.horovod.keras as hvd
+
+# construct the argument parser and parse the arguments
+ap = argparse.ArgumentParser()
+ap.add_argument("-e", "--epochs", type=int, default=10, help="epoch size")
+ap.add_argument("-bs", "--batch_size", type=int, default=128, help="batch size")
+args = vars(ap.parse_args())
 
 # runtime params
 steps_per_epoch = 500
-epochs = 10
-batch_size = 128
+epochs = args['epochs']
+batch_size = args['batch_size']
 
 # Horovod: initialize Horovod.
 hvd.init()
@@ -102,5 +109,5 @@ history = mnist_model.fit(dataset, steps_per_epoch=steps_per_epoch // hvd.size()
 t1 = time.time()
 
 if hvd.rank() == 0:
-    acc = history.history['accuracy']
-    print(f"Took: {t1-t0:.2f} sec to reach {acc} accuracy")
+    best_acc = max(history.history['accuracy'])
+    print(f"Took: {t1-t0:.2f} sec to reach {best_acc} accuracy on batch size {batch_size}")

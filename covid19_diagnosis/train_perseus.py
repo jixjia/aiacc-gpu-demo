@@ -3,7 +3,7 @@ import perseus.tensorflow.horovod.keras as hvd
 import tensorflow as tf
 from tensorflow.python.ops.variables import model_variables
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.applications import VGG16
+from tensorflow.keras.applications import VGG16, ResNet50, MobileNetV2
 from tensorflow.keras.layers import AveragePooling2D
 from tensorflow.keras.layers import MaxPooling2D
 from tensorflow.keras.layers import Conv2D
@@ -90,8 +90,8 @@ def data_augmentation(trainX,testX,trainY,testY,batch_size):
 
 
 def construct_model():
-	# load VGG network with pre-trained ImageNet, lay off head FC layer
-	baseModel = VGG16(weights="imagenet", 
+	# load ResNet50 network with pre-trained ImageNet, lay off head FC layer
+	baseModel = ResNet50(weights="imagenet", 
 					  include_top=False, 
 					  input_tensor=Input(shape=(224, 224, 3)))
 
@@ -99,7 +99,7 @@ def construct_model():
 	headModel = baseModel.output
 	headModel = AveragePooling2D(pool_size=(4, 4))(headModel)
 	headModel = Flatten(name="flatten")(headModel)
-	headModel = Dense(64, activation="relu")(headModel)
+	headModel = Dense(256, activation="relu")(headModel)
 	headModel = Dropout(0.5)(headModel)
 	headModel = Dense(2, activation="softmax")(headModel)
 
@@ -209,10 +209,10 @@ verbose = 1 if hvd.rank() == 0 else 0
 t0 = time.time()
 history = model.fit(
 			x=trainAug,
-			# steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
-			steps_per_epoch = STEP_SIZE,
+			steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
+			# steps_per_epoch = STEP_SIZE,
 			validation_data=(valAug),
-			# validation_steps=len(testX) // BATCH_SIZE // hvd.size(),
+			validation_steps=len(testX) // BATCH_SIZE // hvd.size(),
 			epochs = EPOCHS,
 			verbose = verbose,
 			callbacks = callbacks)
