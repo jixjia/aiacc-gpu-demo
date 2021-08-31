@@ -2,9 +2,15 @@
 # python train.py --d dataset -p training_plot.png
 
 # import the necessary packages
+import tensorflow as tf
+from tensorflow.python.ops.variables import model_variables
+# import horovod.tensorflow.keras as hvd
+import perseus.tensorflow.horovod.keras as hvd
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import VGG16
 from tensorflow.keras.layers import AveragePooling2D
+from tensorflow.keras.layers import MaxPooling2D
+from tensorflow.keras.layers import Conv2D
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Dense
@@ -44,13 +50,28 @@ ap = argparse.ArgumentParser()
 ap.add_argument("-d", "--dataset", default="dataset",help="path to input dataset")
 ap.add_argument("-p", "--plot", type=str, default="training_plot.png", help="path to output loss/accuracy plot")
 ap.add_argument("-m", "--model", type=str, default="covid19.model", help="path to output loss/accuracy plot")
+ap.add_argument("-lr", "--initial_lr", type=float, default="0.001", help="initial learning rate (default 1e-3)")
+ap.add_argument("-e", "--epochs", type=int, default=50, help="epoch size")
+ap.add_argument("-bs", "--batch_size", type=int, default=8, help="batch size")
+
 args = vars(ap.parse_args())
 
 # initialize the initial learning rate, number of epochs to train for,
 # and batch size
-INIT_LR = 1e-3
-EPOCHS = 25
-BATCH_SIZE = 16
+INIT_LR = args['initial_lr']
+EPOCHS = args['epochs']
+BATCH_SIZE = args['batch_size']
+
+# Horovod: initialize Horovod.
+hvd.init()
+
+# Horovod: pin GPU to be used to process local rank (one GPU per process)
+gpus = tf.config.experimental.list_physical_devices('GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
+if gpus:
+    tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
+
 
 # grab the list of images in our dataset directory, then initialize
 # the list of data (i.e., images) and class images
@@ -89,6 +110,8 @@ labels = to_categorical(labels)
 # partition the data into training and testing splits (80:20)
 (trainX, testX, trainY, testY) = train_test_split(data, labels,
 	test_size=0.20, stratify=labels, random_state=123)
+
+print('[INFO] Loaded', len(trainX), 'training images and', len(testX), 'test images')
 
 # initialize the training data augmentation object
 trainAug = ImageDataGenerator(
@@ -143,55 +166,83 @@ for layer in baseModel.layers:
 
 # compile our model
 print('[INFO] compiling model...', end='')
-opt = Adam(lr=INIT_LR, decay=INIT_LR / EPOCHS)
-model.compile(
-	loss="binary_crossentropy", 
-	optimizer=opt, 
-	metrics=["accuracy"])
+
+# Horovod: adjust learning rate based on number of GPUs.
+opt = Adam(lr=INIT_LR * hvd.size(), decay=INIT_LR / EPOCHS)
+
+# Horovod: add Horovod DistributedOptimizer.
+opt = hvd.DistributedOptimizer(opt)
+
+model.compile(loss="binary_crossentropy",
+                    optimizer=opt,
+                    metrics=['accuracy'],
+					experimental_run_tf_function=False)
+
+callbacks = [
+    # Horovod: broadcast initial variable states from rank 0 to all other processes.
+    # This is necessary to ensure consistent initialization of all workers when
+    # training is started with random weights or restored from a checkpoint.
+    hvd.callbacks.BroadcastGlobalVariablesCallback(0),
+
+    # Horovod: average metrics among workers at the end of every epoch.
+    # Note: This callback must be in the list before the ReduceLROnPlateau,
+    # TensorBoard or other metrics-based callbacks.
+     hvd.callbacks.MetricAverageCallback(),
+
+    # Horovod: using `lr = 1.0 * hvd.size()` from the very beginning leads to worse final
+    # accuracy. Scale the learning rate `lr = 1.0` ---> `lr = 1.0 * hvd.size()` during
+    # hvd.callbacks.LearningRateWarmupCallback(warmup_epochs=3, verbose=1),
+]
+
 print('Done')
 
 # begin fine tuning the head of the network
-print('[INFO] transfer learning by fine tuning the head...')
+print(f'[INFO] GPU {hvd.rank()} -> Begin transfer learning by fine tuning the DNN head...')
+
+# Horovod: write logs on worker 0.
 t0 = time.time()
+verbose = 1 if hvd.rank() == 0 else 0
 
 history = model.fit(
 			x=trainGen,
-			steps_per_epoch=len(trainX) // BATCH_SIZE,
-			validation_data=valGen,
-			validation_steps=len(testX) // BATCH_SIZE,
-			epochs=EPOCHS)
-
+			steps_per_epoch = len(trainX) // BATCH_SIZE // hvd.size(),
+			callbacks = callbacks,
+			validation_data=(valGen),
+			validation_steps=len(testX) // BATCH_SIZE // hvd.size(),
+			epochs = EPOCHS,
+			verbose = verbose)
 t1 = time.time()
 
-# make predictions on the testing set
-print('[INFO] evaluating fine tuned network...')
-predIdxs = model.predict(testX, batch_size=BATCH_SIZE)
+# execute network evaluation on head node
+if hvd.rank() == 0:
+	print('[INFO] evaluating network...')
+	predIdxs = model.predict(testX, batch_size=BATCH_SIZE)
 
-# for each image in the testing set we need to find the index of the
-# label with corresponding largest predicted probability
-predIdxs = np.argmax(predIdxs, axis=1)
+	# for each image in the testing set we need to find the index of the
+	# label with corresponding largest predicted probability
+	predIdxs = np.argmax(predIdxs, axis=1)
 
-# show a nicely formatted classification report
-print(classification_report(testY.argmax(axis=1), predIdxs, target_names=lb.classes_))
+	# show a nicely formatted classification report
+	print(classification_report(testY.argmax(axis=1), predIdxs, target_names=lb.classes_))
 
-# compute the confusion matrix and and use it to derive the raw
-# accuracy, sensitivity, and specificity
-cm = confusion_matrix(testY.argmax(axis=1), predIdxs)
-total = sum(sum(cm))
-acc = (cm[0, 0] + cm[1, 1]) / total
-sensitivity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
-specificity = cm[1, 1] / (cm[1, 0] + cm[1, 1])
+	# compute the confusion matrix and and use it to derive the raw
+	# accuracy, sensitivity, and specificity
+	cm = confusion_matrix(testY.argmax(axis=1), predIdxs)
+	total = sum(sum(cm))
+	acc = (cm[0, 0] + cm[1, 1]) / total
+	sensitivity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
+	specificity = cm[1, 1] / (cm[1, 0] + cm[1, 1])
 
-# show the confusion matrix, accuracy, sensitivity, and specificity
-print("acc: {:.4f}".format(acc))
-print("sensitivity: {:.4f}".format(sensitivity))
-print("specificity: {:.4f}".format(specificity))
+	# show the confusion matrix, accuracy, sensitivity, and specificity
+	print("acc: {:.4f}".format(acc))
+	print("sensitivity: {:.4f}".format(sensitivity))
+	print("specificity: {:.4f}".format(specificity))
 
-# plot the training loss and accuracy
-plot_training(history, EPOCHS, args['plot'])
+	# plot the training loss and accuracy
+	plot_training(history, EPOCHS, args['plot'])
 
-# serialize the model to disk
-print("[INFO] saving COVID-19 detector model...")
-model.save(args["model"], save_format="h5")
+	# serialize the model to disk
+	print("[INFO] saving COVID-19 detector model...")
+	model.save(args["model"], save_format="h5")
 
-print(f"[INFO] Completed {EPOCHS} epochs in {(t1-t0):.1f} sec using BATCH SIZE {BATCH_SIZE}")
+	print(f"[INFO] Completed {EPOCHS} epochs in {(t1-t0):.1f} sec using BATCH SIZE {BATCH_SIZE}")

@@ -196,7 +196,7 @@ callbacks = [
 print('Done')
 
 # begin fine tuning the head of the network
-print('[INFO] transfer learning by fine tuning the head...')
+print(f'[INFO] GPU {hvd.rank()} -> Begin transfer learning by fine tuning the DNN head...')
 
 # Horovod: write logs on worker 0.
 t0 = time.time()
@@ -214,7 +214,7 @@ t1 = time.time()
 
 # execute network evaluation on head node
 if hvd.rank() == 0:
-	print('[INFO] evaluating fine tuned network...')
+	print('[INFO] evaluating network...')
 	predIdxs = model.predict(testX, batch_size=BATCH_SIZE)
 
 	# for each image in the testing set we need to find the index of the
@@ -244,4 +244,4 @@ if hvd.rank() == 0:
 	print("[INFO] saving COVID-19 detector model...")
 	model.save(args["model"], save_format="h5")
 
-	print(f"[INFO] total time elapsed {(t1-t0)/60:.1f} min")
+	print(f"[INFO] Completed {EPOCHS} epochs in {(t1-t0):.1f} sec using BATCH SIZE {BATCH_SIZE}")
