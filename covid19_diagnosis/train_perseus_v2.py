@@ -223,9 +223,8 @@ print(f'[INFO] GPU {hvd.rank()} -> training model...')
 
 t0 = time.time()
 H = model.fit(
-	(trainX, trainY),
+	trainX, trainY,
 	batch_size = BS,
-    steps_per_epoch = STEP_SIZE if STEP_SIZE else len(trainX) // BS  // hvd.size(),
     epochs = NUM_EPOCHS,
 	verbose = 1 if hvd.rank() == 0 else 0,
 	callbacks = callbacks)
