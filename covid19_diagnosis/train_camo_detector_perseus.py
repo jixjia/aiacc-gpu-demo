@@ -187,7 +187,7 @@ H = model.fit_generator(
 	trainGen,
 	steps_per_epoch = totalTrain // BS  // hvd.size(),
 	validation_data = valGen,
-	validation_steps = totalVal // BS  // hvd.size(),
+	validation_steps = totalVal // hvd.size(),
 	epochs = NUM_EPOCHS,
 	verbose = 1 if hvd.rank() == 0 else 0,
 	callbacks = callbacks)
