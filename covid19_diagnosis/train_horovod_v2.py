@@ -224,7 +224,7 @@ model, callbacks = construct_model(INIT_LR, NUM_EPOCHS)
 print(f'[INFO] GPU {hvd.rank()} -> training model...')
 
 t0 = time.time()
-H = model.fit_generator(
+H = model.fit(
 	(trainX, trainY),
 	batch_size = BS,
     steps_per_epoch = STEP_SIZE if STEP_SIZE else len(trainX) // BS  // hvd.size(),
