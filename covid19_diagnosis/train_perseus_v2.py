@@ -195,7 +195,7 @@ for imagePath in imagePaths:
 	images.append(image)
 	labels.append(label)
 
-print('Done')
+print(f'Done! {len(images)}/{len(labels)} training images')
 
 # convert to np arrays and normalize it to rgb range [0, 255]
 data = np.array(images) / 255.0
