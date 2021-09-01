@@ -1,11 +1,11 @@
-# mpirun -np 4 --allow-run-as-root python train_horovod.py -e 10 -s 10 -bs 4
+# mpirun -np 4 --allow-run-as-root python train_perseus.py -e 10 -s 10 -bs 4
 
 # set the matplotlib backend so figures can be saved in the background
 import matplotlib
 matplotlib.use("Agg")
 
 # import the necessary packages
-import perseus.tensorflow.horovod.keras as hvd
+import horovod.tensorflow.keras as hvd
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.layers import AveragePooling2D
@@ -18,12 +18,19 @@ from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.applications import VGG16, ResNet50, MobileNetV2
+from tensorflow.keras.utils import to_categorical
 from sklearn.metrics import classification_report
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix
 from imutils import paths
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse
 import time
+import os
+import cv2
+import os
 
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
@@ -169,14 +176,45 @@ TRAIN_PATH = 'chest_images/training'
 VAL_PATH = 'chest_images/validation'
 TEST_PATH = 'chest_images/test'
 
-totalTrain = len(list(paths.list_images(TRAIN_PATH)))
-totalVal = len(list(paths.list_images(VAL_PATH)))
-totalTest = len(list(paths.list_images(TEST_PATH)))
-
 print(f'[INFO] GPU {hvd.rank()} -> \nTrainset: {totalTrain}\nValset: {totalVal}\nTestset: {totalTest}')
 
-# data augmentation
-trainGen, valGen, testGen = data_augmentation(TRAIN_PATH, VAL_PATH, TEST_PATH, BS)
+print('[INFO] loading images...', end='')
+imagePaths = list(paths.list_images(TRAIN_PATH))
+images = []
+labels = []
+
+for imagePath in imagePaths:
+	# extract the class label from the filename
+	label = imagePath.split(os.path.sep)[-2]
+
+	# load the image, swap color channels, and resize it to be a fixed
+	# 224x224 pixels while ignoring aspect ratio
+	image = cv2.imread(imagePath)
+	image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+	image = cv2.resize(image, (224, 224))
+
+	# update the data and labels lists, respectively
+	images.append(image)
+	labels.append(label)
+
+print('Done')
+
+# convert to np arrays and normalize it to rgb range [0, 255]
+data = np.array(images) / 255.0
+labels = np.array(labels)
+
+# one-hot encode labels by directory name
+lb = LabelBinarizer()
+labels = lb.fit_transform(labels)
+labels = to_categorical(labels)
+
+# train/test split (90:10)
+(trainX, testX, trainY, testY) = train_test_split(data, 
+												  labels,
+												  test_size=0.80, 
+												  stratify=labels, 
+												  random_state=42)
+
 
 # construct model
 print(f'[INFO] GPU {hvd.rank()} -> preparing model...')
@@ -187,11 +225,10 @@ print(f'[INFO] GPU {hvd.rank()} -> training model...')
 
 t0 = time.time()
 H = model.fit_generator(
-	trainGen,
-	steps_per_epoch = STEP_SIZE if STEP_SIZE else totalTrain // BS  // hvd.size(),
-	# validation_data = valGen,
-	# validation_steps = totalVal // hvd.size(),
-	epochs = NUM_EPOCHS,
+	(trainX, trainY),
+	batch_size = BS,
+    steps_per_epoch = STEP_SIZE if STEP_SIZE else len(trainX) // BS  // hvd.size(),
+    epochs = NUM_EPOCHS,
 	verbose = 1 if hvd.rank() == 0 else 0,
 	callbacks = callbacks)
 t1 = time.time()

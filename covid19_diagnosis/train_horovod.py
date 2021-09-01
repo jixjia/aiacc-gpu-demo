@@ -1,3 +1,5 @@
+# mpirun -np 4 --allow-run-as-root python train_perseus.py -e 10 -s 10 -bs 4
+
 # set the matplotlib backend so figures can be saved in the background
 import matplotlib
 matplotlib.use("Agg")
