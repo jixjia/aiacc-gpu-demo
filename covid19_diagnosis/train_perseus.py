@@ -28,7 +28,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("-lr", "--initial_lr", type=float, default=0.0001, help="initial learning rate (default 1e-3)")
 ap.add_argument("-e", "--epochs", type=int, default=50, help="epoch size")
 ap.add_argument("-bs", "--batch_size", type=int, default=8, help="batch size")
-ap.add_argument("-s", "--step_size", type=int, default=50, help="step size")
+ap.add_argument("-s", "--step_size", type=int, required=False, help="step size")
 args = vars(ap.parse_args())
 
 # initialize Horovod
@@ -157,6 +157,7 @@ def serialize_model(model, outputPath):
 BS = args['batch_size']
 INIT_LR = args['initial_lr']
 NUM_EPOCHS = args['epochs']
+STEP_SIZE = args['step_size']
 MODEL_PATH = 'covid19_resnet50.model'
 PLOT_PATH = 'covid19_resnet50_plot.png'
 CLASSES = ["covid", "normal"]
@@ -185,29 +186,29 @@ print(f'[INFO] GPU {hvd.rank()} -> training model...')
 t0 = time.time()
 H = model.fit_generator(
 	trainGen,
-	steps_per_epoch = totalTrain // BS  // hvd.size(),
-	validation_data = valGen,
-	validation_steps = totalVal // hvd.size(),
+	steps_per_epoch = STEP_SIZE if STEP_SIZE else totalTrain // BS  // hvd.size(),
+	# validation_data = valGen,
+	# validation_steps = totalVal // hvd.size(),
 	epochs = NUM_EPOCHS,
 	verbose = 1 if hvd.rank() == 0 else 0,
 	callbacks = callbacks)
 t1 = time.time()
 
 if hvd.rank() == 0:
-	# serialize the model to disk
-	serialize_model(model, MODEL_PATH)
+	# # serialize the model to disk
+	# serialize_model(model, MODEL_PATH)
 
-	# performance evaluation
-	print('[INFO] evaluating model...')
-	testGen.reset()
-	predIdxs = model.predict_generator(testGen, steps=(totalTest // BS) + 1)
-	predIdxs = np.argmax(predIdxs, axis=1)
+	# # performance evaluation
+	# print('[INFO] evaluating model...')
+	# testGen.reset()
+	# predIdxs = model.predict_generator(testGen, steps=(totalTest // BS) + 1)
+	# predIdxs = np.argmax(predIdxs, axis=1)
 
-	# show a nicely formatted classification report
-	print(classification_report(testGen.classes, predIdxs,target_names=testGen.class_indices.keys()))
+	# # show a nicely formatted classification report
+	# print(classification_report(testGen.classes, predIdxs,target_names=testGen.class_indices.keys()))
 
-	# plot training loss and accuracy
-	plot_training(H, NUM_EPOCHS, PLOT_PATH)
+	# # plot training loss and accuracy
+	# plot_training(H, NUM_EPOCHS, PLOT_PATH)
 
 	# summary
 	print(f"[INFO] Completed {NUM_EPOCHS} epochs in {(t1-t0):.1f} sec using BATCH SIZE {BS}")
