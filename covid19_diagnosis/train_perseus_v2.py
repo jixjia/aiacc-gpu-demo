@@ -176,8 +176,6 @@ TRAIN_PATH = 'chest_images/training'
 VAL_PATH = 'chest_images/validation'
 TEST_PATH = 'chest_images/test'
 
-print(f'[INFO] GPU {hvd.rank()} -> \nTrainset: {totalTrain}\nValset: {totalVal}\nTestset: {totalTest}')
-
 print('[INFO] loading images...', end='')
 imagePaths = list(paths.list_images(TRAIN_PATH))
 images = []
