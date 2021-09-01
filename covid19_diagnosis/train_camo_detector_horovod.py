@@ -192,3 +192,5 @@ if hvd.rank() == 0:
 	plt.ylabel("Loss/Accuracy")
 	plt.legend(loc="lower left")
 	plt.savefig('covid19_resnet50_plot.png')
+
+	print(f"[INFO] Completed {NUM_EPOCHS} epochs in {(t1-t0):.1f} sec using BATCH SIZE {BS}")
