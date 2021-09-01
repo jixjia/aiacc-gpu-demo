@@ -1,212 +1,160 @@
+# USAGE
+# python train_camo_detector.py
+
+# set the matplotlib backend so figures can be saved in the background
+import matplotlib
+matplotlib.use("Agg")
+
 # import the necessary packages
-import tensorflow as tf
-from tensorflow.python.ops.variables import model_variables
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.applications import VGG16
 from tensorflow.keras.layers import AveragePooling2D
-from tensorflow.keras.layers import MaxPooling2D
-from tensorflow.keras.layers import Conv2D
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
-from tensorflow.keras.optimizers import Adam, SGD
-from tensorflow.keras.utils import to_categorical
-from sklearn.preprocessing import LabelBinarizer
-from sklearn.model_selection import train_test_split
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.applications import ResNet50
 from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
 from imutils import paths
-import time
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse
-import cv2
-import os
 
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
-ap.add_argument("-d", "--dataset", type=str, default="dataset",help="path to input dataset")
-ap.add_argument("-p", "--plot", type=str, default="training_plot.png", help="path to output loss/accuracy plot")
-ap.add_argument("-m", "--model", type=str, default="covid19.model", help="path to output loss/accuracy plot")
-ap.add_argument("-lr", "--initial_lr", type=float, default=0.001, help="initial learning rate (default 1e-3)")
-ap.add_argument("-e", "--epochs", type=int, default=50, help="epoch size")
-ap.add_argument("-bs", "--batch_size", type=int, default=8, help="batch size")
+ap.add_argument("-p", "--plot", type=str, default="camo_plot.png", help="path to output loss/accuracy plot")
 args = vars(ap.parse_args())
 
+# determine the total number of image paths in training, validation,
+# and testing directories
+TRAIN_PATH = 'chest_images/training'
+VAL_PATH = 'chest_images/validation'
+TEST_PATH = 'chest_images/test'
+BS = 32
+INIT_LR = 1e-4
+NUM_EPOCHS = 20
+MODEL_PATH = "covid19_resnet50.model"
+CLASSES = ["covid", "normal"]
 
-def plot_training(history, N, plotPath):
-	# construct a plot that plots and saves the training history
-	plt.style.use("ggplot")
-	plt.figure()
-	plt.plot(np.arange(0, N), history.history["loss"], label="train_loss")
-	plt.plot(np.arange(0, N), history.history["val_loss"], label="val_loss")
-	plt.plot(np.arange(0, N), history.history["accuracy"], label="train_acc")
-	plt.plot(np.arange(0, N), history.history["val_accuracy"], label="val_acc")
-	plt.title("Training Loss and Accuracy on COVID-19 Dataset")
-	plt.xlabel("Epoch #")
-	plt.ylabel("Loss/Accuracy")
-	plt.legend(loc="lower left")
-	plt.savefig(plotPath)
+totalTrain = len(list(paths.list_images(TRAIN_PATH)))
+totalVal = len(list(paths.list_images(VAL_PATH)))
+totalTest = len(list(paths.list_images(TEST_PATH)))
 
+print(f'Trainset: {totalTrain}\nValset: {totalVal}\nTestset: {totalTest}')
 
-def data_augmentation(trainX,testX,trainY,testY,batch_size):
-	# initialize the training data augmentation
-	trainGen = ImageDataGenerator(
-		rotation_range=15,
-		zoom_range=0.2,
-		width_shift_range=0.1,
-		height_shift_range=0.1,
-		shear_range=0.15,
-		horizontal_flip=True,
-		fill_mode="nearest"
-		)
+# initialize the training training data augmentation object
+trainAug = ImageDataGenerator(
+	rotation_range=25,
+	zoom_range=0.1,
+	width_shift_range=0.1,
+	height_shift_range=0.1,
+	shear_range=0.2,
+	horizontal_flip=True,
+	fill_mode="nearest")
 
-	# initialize the validation/testing data augmentation
-	valGen = ImageDataGenerator()
+# initialize the validation/testing data augmentation object (which
+# we'll be adding mean subtraction to)
+valAug = ImageDataGenerator()
 
-	# set ImageNet mean subtraction (in RGB order) and apply it to the mean subtraction value for each of the data augmentation objects
-	mean = np.array([123.68, 116.779, 103.939], dtype="float32")
-	trainGen.mean = mean
-	valGen.mean = mean
+# define the ImageNet mean subtraction (in RGB order) and set the
+# the mean subtraction value for each of the data augmentation
+# objects
+mean = np.array([123.68, 116.779, 103.939], dtype="float32")
+trainAug.mean = mean
+valAug.mean = mean
 
-	# initialize the training generator
-	trainAug = trainGen.flow(
-		trainX, 
-		trainY,
-		shuffle=True,
-		batch_size=batch_size)
+# initialize the training generator
+trainGen = trainAug.flow_from_directory(
+	TRAIN_PATH,
+	class_mode="categorical",
+	target_size=(224, 224),
+	color_mode="rgb",
+	shuffle=True,
+	batch_size=BS)
 
-	# initialize the validation generator
-	valAug = valGen.flow(
-		testX,
-		testY,
-		shuffle=False,
-		batch_size=batch_size)
-	
-	return trainAug, valAug
+# initialize the validation generator
+valGen = valAug.flow_from_directory(
+	VAL_PATH,
+	class_mode="categorical",
+	target_size=(224, 224),
+	color_mode="rgb",
+	shuffle=False,
+	batch_size=BS)
 
+# initialize the testing generator
+testGen = valAug.flow_from_directory(
+	TEST_PATH,
+	class_mode="categorical",
+	target_size=(224, 224),
+	color_mode="rgb",
+	shuffle=False,
+	batch_size=BS)
 
-def construct_model():
-	# load VGG network with pre-trained ImageNet, lay off head FC layer
-	baseModel = VGG16(weights="imagenet", 
-					  include_top=False, 
-					  input_tensor=Input(shape=(224, 224, 3)))
+# load the ResNet-50 network, ensuring the head FC layer sets are left off
+print("[INFO] preparing model...")
+baseModel = ResNet50(weights="imagenet", include_top=False,	input_tensor=Input(shape=(224, 224, 3)))
 
-	# construct new head for fine-tuning
-	headModel = baseModel.output
-	headModel = AveragePooling2D(pool_size=(4, 4))(headModel)
-	headModel = Flatten(name="flatten")(headModel)
-	headModel = Dense(64, activation="relu")(headModel)
-	headModel = Dropout(0.5)(headModel)
-	headModel = Dense(2, activation="softmax")(headModel)
+# construct the head of the model that will be placed on top of the
+# the base model
+headModel = baseModel.output
+headModel = AveragePooling2D(pool_size=(7, 7))(headModel)
+headModel = Flatten(name="flatten")(headModel)
+headModel = Dense(256, activation="relu")(headModel)
+headModel = Dropout(0.5)(headModel)
+headModel = Dense(len(CLASSES), activation="softmax")(headModel)
 
-	# place the head FC model on top of the base model
-	model = Model(inputs=baseModel.input, outputs=headModel)
+# place the head FC model on top of the base model (this will become
+# the actual model we will train)
+model = Model(inputs=baseModel.input, outputs=headModel)
 
-	# freeze base model layers
-	for layer in baseModel.layers:
-		layer.trainable = False
+# loop over all layers in the base model and freeze them so they will
+# *not* be updated during the training process
+for layer in baseModel.layers:
+	layer.trainable = False
 
-	# compile model
-	opt = Adam(lr=INIT_LR, decay=INIT_LR / EPOCHS)
-	model.compile(loss="binary_crossentropy", 
-				  optimizer=opt, 
-				  metrics=["accuracy"])
+# compile the model
+opt = Adam(lr=INIT_LR, decay=INIT_LR / NUM_EPOCHS)
+model.compile(loss="binary_crossentropy", optimizer=opt,
+	metrics=["accuracy"])
 
-	return model
+# train the model
+print("[INFO] training model...")
+H = model.fit_generator(
+	trainGen,
+	steps_per_epoch=totalTrain // BS,
+	validation_data=valGen,
+	validation_steps=totalVal // BS,
+	epochs=NUM_EPOCHS)
 
+# reset the testing generator and then use our trained model to
+# make predictions on the data
+print("[INFO] evaluating network...")
+testGen.reset()
+predIdxs = model.predict_generator(testGen, steps=(totalTest // BS) + 1)
 
-def serialize_model(model, outputPath):
-	print("[INFO] saving COVID-19 diagnostic model...")
-	model.save(outputPath, save_format="h5")
-
-
-# initialize the initial LR, number of epochs and pool batch size
-INIT_LR = args['initial_lr']
-EPOCHS = args['epochs']
-BATCH_SIZE = args['batch_size']
-
-# load images
-print('[INFO] loading images...', end='')
-
-imagePaths = list(paths.list_images(args["dataset"]))
-images = []
-labels = []
-
-for imagePath in imagePaths:
-	# extract the class label from the filename
-	label = imagePath.split(os.path.sep)[-2]
-
-	# load the image, swap color channels, and resize it to be a fixed
-	# 224x224 pixels while ignoring aspect ratio
-	image = cv2.imread(imagePath)
-	image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-	image = cv2.resize(image, (224, 224))
-
-	# update the data and labels lists, respectively
-	images.append(image)
-	labels.append(label)
-
-print('Done')
-
-# convert to np arrays and normalize it to rgb range [0, 255]
-data = np.array(images) / 255.0
-labels = np.array(labels)
-
-# one-hot encode labels by directory name
-lb = LabelBinarizer()
-labels = lb.fit_transform(labels)
-labels = to_categorical(labels)
-
-# train/test split (80:20)
-(trainX, testX, trainY, testY) = train_test_split(data, 
-												  labels,
-												  test_size=0.20, 
-												  stratify=labels, 
-												  random_state=123)
-
-# data augmentation
-trainAug, valAug = data_augmentation(trainX,testX,trainY,testY,BATCH_SIZE)
-
-# construct model
-print('[INFO] compiling model...', end='')
-model = construct_model()
-print('Done')
-
-# fine-tune the network
-print('[INFO] transfer learning by fine tuning the head layer...')
-t0 = time.time()
-history = model.fit(
-			x=trainAug,
-			steps_per_epoch=len(trainX) // BATCH_SIZE,
-			validation_data=valAug,
-			validation_steps=len(testX) // BATCH_SIZE,
-			epochs=EPOCHS)
-t1 = time.time()
-
-# serialize the model to disk
-serialize_model(model, args["model"])
-
-# performance evaluation
-print('[INFO] evaluating model...')
-predIdxs = model.predict(testX, batch_size=BATCH_SIZE)
+# for each image in the testing set we need to find the index of the
+# label with corresponding largest predicted probability
 predIdxs = np.argmax(predIdxs, axis=1)
 
-# show the confusion matrix, accuracy, sensitivity, and specificity
-cm = confusion_matrix(testY.argmax(axis=1), predIdxs)
-total = sum(sum(cm))
-acc = (cm[0, 0] + cm[1, 1]) / total
-sensitivity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
-specificity = cm[1, 1] / (cm[1, 0] + cm[1, 1])
+# show a nicely formatted classification report
+print(classification_report(testGen.classes, predIdxs,
+	target_names=testGen.class_indices.keys()))
 
-print(classification_report(testY.argmax(axis=1), predIdxs, target_names=lb.classes_))
-print("acc: {:.4f}".format(acc))
-print("sensitivity: {:.4f}".format(sensitivity))
-print("specificity: {:.4f}".format(specificity))
+# serialize the model to disk
+print("[INFO] saving model...")
+model.save(MODEL_PATH, save_format="h5")
 
-# plot training loss and accuracy
-plot_training(history, EPOCHS, args['plot'])
-
-print(f"[INFO] Completed {EPOCHS} epochs in {(t1-t0):.1f} sec using BATCH SIZE {BATCH_SIZE}")
+# plot the training loss and accuracy
+N = NUM_EPOCHS
+plt.style.use("ggplot")
+plt.figure()
+plt.plot(np.arange(0, N), H.history["loss"], label="train_loss")
+plt.plot(np.arange(0, N), H.history["val_loss"], label="val_loss")
+plt.plot(np.arange(0, N), H.history["accuracy"], label="train_acc")
+plt.plot(np.arange(0, N), H.history["val_accuracy"], label="val_acc")
+plt.title("Training Loss and Accuracy on Dataset")
+plt.xlabel("Epoch #")
+plt.ylabel("Loss/Accuracy")
+plt.legend(loc="lower left")
+plt.savefig(args["plot"])
