@@ -57,7 +57,7 @@ totalTrain = len(list(paths.list_images(TRAIN_PATH)))
 totalVal = len(list(paths.list_images(VAL_PATH)))
 totalTest = len(list(paths.list_images(TEST_PATH)))
 
-print(f'[INFO] GPU {hvd.rank()} -> Trainset: {totalTrain}\nValset: {totalVal}\nTestset: {totalTest}')
+print(f'[INFO] GPU {hvd.rank()} -> \nTrainset: {totalTrain}\nValset: {totalVal}\nTestset: {totalTest}')
 
 # initialize the training training data augmentation object
 trainAug = ImageDataGenerator(
@@ -187,8 +187,8 @@ if hvd.rank() == 0:
 	plt.plot(np.arange(0, N), H.history["val_loss"], label="val_loss")
 	plt.plot(np.arange(0, N), H.history["accuracy"], label="train_acc")
 	plt.plot(np.arange(0, N), H.history["val_accuracy"], label="val_acc")
-	plt.title("Training Loss and Accuracy on Dataset")
+	plt.title("Training Loss and Accuracy on COVID-19 Dataset")
 	plt.xlabel("Epoch #")
 	plt.ylabel("Loss/Accuracy")
 	plt.legend(loc="lower left")
-	plt.savefig(args["plot"])
+	plt.savefig('covid19_resnet50_plot.png')
