@@ -13,6 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 
+# mpirun -np 4 --allow-run-as-root python tf_keras_mnist_horovod_no_cb.py -bs 32 -e 50
+
 import os
 import time
 import sys

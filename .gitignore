@@ -1,2 +1,5 @@
 *.model
 covid19_diagnosis/training_plot.png
+.vscode/*
+__pycache__/
+*.xlsx

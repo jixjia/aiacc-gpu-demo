@@ -1,4 +1,4 @@
-# mpirun -np 4 --allow-run-as-root python train_perseus.py -e 10 -s 10 -bs 4
+# mpirun -np 4 --allow-run-as-root python train_perseus_v2.py -e 50 -bs 8
 
 # set the matplotlib backend so figures can be saved in the background
 import matplotlib

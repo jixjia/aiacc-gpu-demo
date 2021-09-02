@@ -6,8 +6,8 @@ import cv2
 
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
-ap.add_argument("-i", "--image", type=str, default="test/normal.jpg", help="path to our input image")
-ap.add_argument("-m", "--model_path", type=str, default="covid19.model", help="path to our input image")
+ap.add_argument("-i", "--image", type=str, default="chest_images/test/normal/1.jpg", help="path to our input image")
+ap.add_argument("-m", "--model_path", type=str, default="covid19_resnet50.model", help="path to our input image")
 args = vars(ap.parse_args())
 
 # load the input image and then clone it so we can draw on it later
