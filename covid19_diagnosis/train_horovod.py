@@ -197,20 +197,20 @@ H = model.fit_generator(
 t1 = time.time()
 
 if hvd.rank() == 0:
-	# # serialize the model to disk
-	# serialize_model(model, MODEL_PATH)
+	# serialize the model to disk
+	serialize_model(model, MODEL_PATH)
 
-	# # performance evaluation
-	# print('[INFO] evaluating model...')
-	# testGen.reset()
-	# predIdxs = model.predict_generator(testGen, steps=(totalTest // BS) + 1)
-	# predIdxs = np.argmax(predIdxs, axis=1)
+	# performance evaluation
+	print('[INFO] evaluating model...')
+	testGen.reset()
+	predIdxs = model.predict_generator(testGen, steps=(totalTest // BS) + 1)
+	predIdxs = np.argmax(predIdxs, axis=1)
 
-	# # show a nicely formatted classification report
-	# print(classification_report(testGen.classes, predIdxs,target_names=testGen.class_indices.keys()))
+	# show a nicely formatted classification report
+	print(classification_report(testGen.classes, predIdxs,target_names=testGen.class_indices.keys()))
 
-	# # plot training loss and accuracy
-	# plot_training(H, NUM_EPOCHS, PLOT_PATH)
+	# plot training loss and accuracy
+	plot_training(H, NUM_EPOCHS, PLOT_PATH)
 
 	# summary
 	print(f"[INFO] Completed {NUM_EPOCHS} epochs in {(t1-t0):.1f} sec using BATCH SIZE {BS}")
