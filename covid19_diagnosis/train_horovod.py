@@ -144,7 +144,8 @@ def construct_model(initial_lr, num_epochs):
 		hvd.callbacks.BroadcastGlobalVariablesCallback(0),
 		# Horovod: average metrics among workers at the end of every epoch.
 		hvd.callbacks.MetricAverageCallback(),
-		# hvd.callbacks.LearningRateWarmupCallback(warmup_epochs=3, verbose=1),
+		# LR warm up
+		hvd.callbacks.LearningRateWarmupCallback(warmup_epochs=3, verbose=1)
 	]
 
 	return model, callbacks
@@ -176,10 +177,13 @@ totalTest = len(list(paths.list_images(TEST_PATH)))
 print(f'[INFO] GPU {hvd.rank()} -> \nTrainset: {totalTrain}\nValset: {totalVal}\nTestset: {totalTest}')
 
 # data augmentation
-trainGen, valGen, testGen = data_augmentation(TRAIN_PATH, VAL_PATH, TEST_PATH, BS)
+trainGen, valGen, testGen = data_augmentation(TRAIN_PATH, 
+											  VAL_PATH, 
+											  TEST_PATH, 
+											  BS)
 
 # construct model
-print(f'[INFO] GPU {hvd.rank()} -> preparing model...')
+print(f'[INFO] GPU {hvd.rank()} -> building model...')
 model, callbacks = construct_model(INIT_LR, NUM_EPOCHS)
 
 # fine-tune the network
@@ -189,8 +193,8 @@ t0 = time.time()
 H = model.fit_generator(
 	trainGen,
 	steps_per_epoch = STEP_SIZE if STEP_SIZE else totalTrain // BS  // hvd.size(),
-	# validation_data = valGen,
-	# validation_steps = totalVal // hvd.size(),
+	validation_data = valGen,
+	validation_steps = totalVal // hvd.size(),
 	epochs = NUM_EPOCHS,
 	verbose = 1 if hvd.rank() == 0 else 0,
 	callbacks = callbacks)

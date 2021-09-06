@@ -51,70 +51,6 @@ if gpus:
     tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
 
 
-def plot_training(history, N, plotPath):
-	# construct a plot that plots and saves the training history
-	plt.style.use("ggplot")
-	plt.figure()
-	plt.plot(np.arange(0, N), history.history["loss"], label="train_loss")
-	plt.plot(np.arange(0, N), history.history["val_loss"], label="val_loss")
-	plt.plot(np.arange(0, N), history.history["accuracy"], label="train_acc")
-	plt.plot(np.arange(0, N), history.history["val_accuracy"], label="val_acc")
-	plt.title("Training Loss and Accuracy on COVID-19 Dataset")
-	plt.xlabel("Epoch #")
-	plt.ylabel("Loss/Accuracy")
-	plt.legend(loc="lower left")
-	plt.savefig(plotPath)
-
-
-def data_augmentation(train_path, val_path, test_path, batch_size):
-	# initialize the training data augmentation
-	trainAug = ImageDataGenerator(
-		rotation_range=25,
-		zoom_range=0.1,
-		width_shift_range=0.1,
-		height_shift_range=0.1,
-		shear_range=0.2,
-		horizontal_flip=True,
-		fill_mode="nearest")
-
-	# initialize the validation/testing data augmentation
-	valAug = ImageDataGenerator()
-
-	# set ImageNet mean subtraction (in RGB order) and apply it to the mean subtraction value for each of the data augmentation objects
-	mean = np.array([123.68, 116.779, 103.939], dtype="float32")
-	trainAug.mean = mean
-	valAug.mean = mean
-
-	# initialize the training generator
-	trainGen = trainAug.flow_from_directory(
-		train_path,
-		class_mode="categorical",
-		target_size=(224, 224),
-		color_mode="rgb",
-		shuffle=True,
-		batch_size=batch_size)
-
-	# initialize the validation generator
-	valGen = valAug.flow_from_directory(
-		val_path,
-		class_mode="categorical",
-		target_size=(224, 224),
-		color_mode="rgb",
-		shuffle=False,
-		batch_size=batch_size)
-
-	# initialize the testing generator
-	testGen = valAug.flow_from_directory(
-		test_path,
-		class_mode="categorical",
-		target_size=(224, 224),
-		color_mode="rgb",
-		shuffle=False,
-		batch_size=batch_size)
-	
-	return trainGen, valGen, testGen
-
-
 def construct_model(initial_lr, num_epochs):
 	# load Resnet50 network with pre-trained ImageNet, lay off head FC layer
 	baseModel = ResNet50(weights="imagenet", 
@@ -150,8 +86,7 @@ def construct_model(initial_lr, num_epochs):
 		# Horovod: broadcast initial variable states from rank 0 to all other processes.
 		hvd.callbacks.BroadcastGlobalVariablesCallback(0),
 		# Horovod: average metrics among workers at the end of every epoch.
-		hvd.callbacks.MetricAverageCallback(),
-		# hvd.callbacks.LearningRateWarmupCallback(warmup_epochs=3, verbose=1),
+		hvd.callbacks.MetricAverageCallback()
 	]
 
 	return model, callbacks
@@ -215,7 +150,7 @@ labels = to_categorical(labels)
 
 
 # construct model
-print(f'[INFO] GPU {hvd.rank()} -> preparing model...')
+print(f'[INFO] GPU {hvd.rank()} -> building model...')
 model, callbacks = construct_model(INIT_LR, NUM_EPOCHS)
 
 # fine-tune the network
@@ -231,20 +166,4 @@ H = model.fit(
 t1 = time.time()
 
 if hvd.rank() == 0:
-	# # serialize the model to disk
-	# serialize_model(model, MODEL_PATH)
-
-	# # performance evaluation
-	# print('[INFO] evaluating model...')
-	# testGen.reset()
-	# predIdxs = model.predict_generator(testGen, steps=(totalTest // BS) + 1)
-	# predIdxs = np.argmax(predIdxs, axis=1)
-
-	# # show a nicely formatted classification report
-	# print(classification_report(testGen.classes, predIdxs,target_names=testGen.class_indices.keys()))
-
-	# # plot training loss and accuracy
-	# plot_training(H, NUM_EPOCHS, PLOT_PATH)
-
-	# summary
 	print(f"[INFO] Completed {NUM_EPOCHS} epochs in {(t1-t0):.1f} sec using BATCH SIZE {BS}")
